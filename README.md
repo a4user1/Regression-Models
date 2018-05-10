@@ -1,5 +1,5 @@
 # Regression-Models
-Take the \color{red}{\verb|mtcars|}mtcars data set and write up an analysis to answer their question using regression models and exploratory data analyses.
+Take the mtcars data set and write up an analysis to answer their question using regression models and exploratory data analyses.
 
 Your report must be:
 
