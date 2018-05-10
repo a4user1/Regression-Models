@@ -1,0 +1,177 @@
+---
+title: "Regression Models Coursera Project"
+author: "Carlos Barco Blanco"
+date: "June 18, 2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+#Executive Summary
+The *Motor-Trend* Magazine is interested in publish an investigation about the relationship between miles per gallon (*mpg*) efficiency and a set of variables, one of the most important is transmission type (manual or automatic).
+#Main Analysis
+First, we need to load the data & explore the relationship between different transmissions and MPG.
+
+##Pairs plotting.
+```{r setup}
+library(knitr)
+library(rgl) #to produce interactive 3-D plots
+knit_hooks$set(webgl = hook_webgl)
+```
+```{r}
+data(mtcars)
+library(car)
+library(GGally)
+library(ggplot2)
+pairs.plot<-ggpairs(mtcars) + 
+            theme(axis.line=element_blank(),
+            axis.text=element_blank(),
+            axis.ticks=element_blank())
+```
+##Cleaning up the data set and running the first regression.
+```{r}
+colnames(mtcars)<-c("Miles/Gallon","Number of Cylinders",
+                    "Displacement (cu.in.)","Gross Horsepower","Rear Axle Ratio",
+                    "Weight (lb/1000)","1/4 Mile Time","Engine Type","Trans Type",
+                    "Number of Forward Gears","Number of Carburetors")
+corr.matrix<-cor(mtcars)
+mtcars$`Trans Type`<-gsub(0,"Automatic",mtcars$`Trans Type`)
+mtcars$`Trans Type`<-gsub(1,"Manual",mtcars$`Trans Type`)
+mtcars$`Engine Type`<-gsub(0,"V-Engine",mtcars$`Engine Type`)
+mtcars$`Engine Type`<-gsub(1,"Straight Engine",mtcars$`Engine Type`)
+```
+
+## Model 1
+* An ordinary least squares (OLS) model.
+  * Dependent variable:  "Miles/Gallon"
+  * Independent variable: "Trans type"
+This is done after renaming the columns and binary variables for better readability.
+```{r}
+fit1 <- lm(`Miles/Gallon`~`Trans Type`,data=mtcars)
+fit1.manual.mpg <- round(sum(fit1$coefficients),2)
+fit1.manual.mpg
+```
+```{r}
+fit1.automatic.mpg<-unname(round(fit1$coefficients[1],2))
+fit1.automatic.mpg
+```
+It appears that on average, a manual transmission will yield **24.39** Miles/Gallon and an automatic transmission will yield **17.15** Miles/Gallon.
+
+```{r}
+fit1.qqplot<-ggplot(fit1, aes(sample=fit1$residuals)) +
+             stat_qq() +
+             geom_abline(intercept=0,slope=5) +
+             xlab("Theoretical Quantiles") +
+             ylab("Miles/Gallon ~ Trans Type Residuals")
+```            
+The erros appears to be normally distributed (see Simple OLS Residuals), but there are many other covariables affecting *mpg* tham just *TransType*.
+
+## Model 2 and probability summaries.
+Uses all of the variables to explain `Miles/Gallon`. 
+
+```{r}
+fit2<-lm(mtcars$`Miles/Gallon`~.,data=mtcars)
+summary.fit2<-summary.lm(fit2)
+summary.fit2
+```
+We see that the R-squared value is **0.869**, meaning that our model explains near to **87%** of the variance.
+The average probability of the hypothesis that the different coefficients have a population mean = 0, equivalent to no effect on `Miles/Gallon` is **0.53** (distribution with a true mean of zero).
+```{r}
+fit2.p.mean<-round(mean(summary.fit2$coefficients[,4]),2)
+fit2.p.mean
+```
+
+The regression coefficient for `Weight (lb/1000)` has an estimated probability of **0.06** (distribution with a true mean of zero).
+```{r}
+fit2.p.min<-round(min(summary.fit2$coefficients[,4]),2)
+fit2.p.min
+```
+The population coefficient has an **0.92** as estimated probability of being from a distribution that is centered around zero.
+```{r}
+fit2.p.max<-round(max(summary.fit2$coefficients[,4]),2)
+fit2.p.max
+```
+According to the model, here occurs a Variance Inflation Factor, due to the high collinearity of the predictors, so not all the variables are needed to predict *mpg* efficiency, but it must be considered the bias due to exclude regressors correlated wth others.
+
+## Model 3
+Using a matrix of correlations (see Apendix 3) we can avoid variance inflation due to collinearity.
+```{r}
+library(reshape2)
+melt.corr<-melt(corr.matrix)
+corr.plot<-ggplot(data =  melt.corr, aes(x = Var1, y = Var2))+
+  geom_tile(aes(fill = value), colour = "white") +
+  geom_text(aes(label = sprintf("%1.2f",value)), vjust = 1) +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  theme(axis.text = element_text(colour = "black"))
+```
+So, the variables that has to be considered are:`Trans Type`and `Weight (lb/1000)`, the last one with a great linear relationship with `Miles/Gallon` = **-0.87**
+```{r}
+cor.1<-round(cor(mtcars$`Weight (lb/1000)`,mtcars$`Miles/Gallon`),2)
+cor.1
+```
+```{r}
+library(car)
+fit3<-lm(`Miles/Gallon`~`1/4 Mile Time`+`Weight (lb/1000)`
+         +`Gross Horsepower`+`Number of Carburetors`
+         +`Weight (lb/1000)`*`Trans Type`, data=mtcars)
+fit3.summary<-summary.lm(fit3)
+fit3.coefficients<-round(fit3.summary$coefficients,2)
+fit3.coefficients
+```
+The variables to be excluded (according to their p-value) are: `Gross Horsepower` (**0.91**) and `Number of Carburetors` (**0.89**), because are highly correlated with `1/4 Mile Time`
+```{r}
+fit3.qqplot<-ggplot(fit1, aes(sample=fit3$residuals)) +
+             stat_qq() +
+             geom_abline(intercept=0,slope=2) +
+             xlab("Theoretical Quantiles") +
+             ylab("Miles/Gallon~1/4 Mile Time+Weight*Trans Type")
+```
+## Final model
+```{r}
+round(fit3.summary$coefficients,4)
+round
+```
+The slope and intercept change in this model depending on the `Trans Type`. 
+
+###Is an automatic or manual transmission better for MPG?
+It depends on the weight of the car. Lighter cars benefit from having manual transmissions while heavier cars don't, holding `1/4 Mile Time` constant.
+###Quantify the MPG difference between automatic and manual transmissions.
+When the transmission is Automatic the intercept is $10.0619$, a one unit increase in `Weight (lb/1000)` results in a $-2.9271$ decrease in `Miles/Gallon`, with `1/4 Mile Time`constant. When it is Manual, the rate of change in `Miles/Gallon` intercept is $10.0619$ + $14.0597$ = $24.1216$, a one unit increase in the `1/4 Mile Time` results in a $1.0021$ increase in `Miles/Gallon` and a one unit increase in `Weight (lb/1000)` results in a fall in the rate of change of $-2.9271$ + $-4.1610$ = $-7.0881$ in `Miles/Gallon`, with `1/4 Mile Time` constant.
+\newpage
+#Appendix
+A.1 Pairs Plot
+```{r, echo=TRUE}
+pairs.plot
+```
+The highly variable distributions and small sample sizes may distort the accuracy of any model. Also, since the sample was not selected using a randomized process this means that the sample is biased. This also affects the accuracy of any model.
+
+A.2 Simple OLS Residuals
+```{r}
+fit1.qqplot
+```
+Miles/Gallon as the dependent and Trans Type as the independent variable. This is done after renaming the columns and binary variables for better readability. It appears that on average, a manual transmission will yield 24.39 Miles/Gallon and an automatic transmission will yield 17.15 Miles/Gallon. There are many other linear variables that affect Miles/Gallon that are offsetting each other in the residuals. 
+
+A.3 Full Correlation Matrix
+```{r}
+corr.plot
+```
+
+A.4 Final Model Residuals
+```{r}
+fit3.qqplot
+```
+the residual distribution doesn't appear to be normal. The model's intercept is also not very significant with a probability of 0.2586 that it comes from a distribution with a population mean of zero. The intercept's meaning doesn't have much weight in this model because none of the predictors can be zero by construction. Again, the small and highly variable sample can also distort the significance and meaning of the coefficients. 
+
+The bias in the sample can also artificially inflate the adjusted coefficient of determination of the multiple linear regression model for the data set = 0.87
+
+```{r}
+round(fit3.summary$adj.r.squared,2)
+```
+Even after being adjusted for the number of covariate parameters, this seems a bit too high. There is likely a mechanistic and nonlinear relationship between some of the variables.
+
+A.5 Final Model
+```{r}
+scatter3d(`Miles/Gallon`~`1/4 Mile Time`+`Weight (lb/1000)`*as.factor(`Trans Type`),data=mtcars)
+```
